@@ -1,0 +1,15 @@
+services:
+  elk:
+    image: jamrizzi/elk:latest
+    ports:
+      - 5601:5601
+  filebeat:
+    image: jamrizzi/filebeat:latest
+    environment:
+      LOGSTASH_HOST: elk
+      LOGSTASH_PORT: '5044'
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock
+      - /var/lib/docker/containers:/var/lib/docker/containers
+    links:
+      - elk:elk
