@@ -24,11 +24,12 @@ def getOptions():
 def generateFilebeatYaml(options, lists, vars):
 	with open('filebeat.yml', 'r') as f:
 		lines = f.readlines()
-		lines = replace_loops(lines, lists, vars)
+		lines = replace_loops(lines, lists)
+		lines = replace_vars(lines, vars)
 		for line in lines:
 			sys.stdout.write(line)
 
-def replace_loops(lines, lists, vars):
+def replace_loops(lines, lists):
 	loop = {
 		'begin': -1,
 		'end': -1
@@ -48,15 +49,14 @@ def replace_loops(lines, lists, vars):
 			chunk_after = list()
 			exec('for ' + item_name + ' in lists[\'' + items_name + '''\']:
   for line in chunk_before:
-    for var in re.findall('(?<={{)(.+)(?=}})', line):
+    for var in re.findall('(?<={{)([^{}$]+)(?=}})', line):
       if var.find(\'''' + item_name + '''[\') != -1:
-	    vars[var] = eval(var)
-      line = line.replace('{{' + var + '}}', vars[var])
+        line = line.replace('{{' + var + '}}', eval(var))
     chunk_after.append(line)
 ''')
 			lines = clear_loop(loop['begin'], loop['end'], lines)
 			lines = replace_loop(loop['begin'], lines, chunk_after)
-			return replace_loops(lines, lists, vars)
+			return replace_loops(lines, lists)
 	return lines
 
 def clear_loop(begin, end, origional):
@@ -69,6 +69,16 @@ def replace_loop(begin, origional, chunk):
 	for i in range(len(chunk)):
 		origional.insert(i + begin, chunk[i])
 	return origional
+
+def replace_vars(lines, vars):
+	new_lines = list()
+	for line in lines:
+		for var in re.findall('(?<={{)([^{}$]+)(?=}})', line):
+			line = line.replace('{{' + var + '}}', vars[var])
+		for var in re.findall('(?<={{\$)([^{}]+)(?=}})', line):
+			line = line.replace('{{$' + var + '}}', os.environ[var] if var in os.environ else '')
+		new_lines.append(line)
+	return new_lines
 
 def getContainers(options):
 	containers = list()
