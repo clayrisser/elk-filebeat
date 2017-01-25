@@ -1,0 +1,21 @@
+filebeat:
+  prospectors:
+<< container in containers
+    -
+      paths:
+        - {{container['log_path']}}
+      fields:
+        name: {{container['name']}}
+        id: {{container['id']}}
+>>
+
+output:
+  logstash:
+    enabled: true
+    hosts:
+      - {{$LOGSTASH_HOST}}:{{$LOGSTASH_PORT}}
+    timeout: 15
+
+logging:
+  level: debug
+
