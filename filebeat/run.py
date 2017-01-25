@@ -3,31 +3,53 @@ import re
 import os
 import docker
 import sys
+import hashlib
 
 client = docker.DockerClient(base_url='unix://var/run/docker.sock')
 
 def main():
-	options = getOptions()
-	containers = getContainers(options)
-	generateFilebeatYaml(options, {
-		'containers': containers
-	}, {
-		'boo': 'yo dude'
-	})
-#	checkDockerStatus(options)
+	options = get_options()
+	update_filebeat(options)
+	print('tailing logs . . .')
+	if options['auto_update']:
+		check_docker_status(options)
 
-def getOptions():
+def get_options():
 	return {
-		'blacklist': True
+		'blacklist': True if ('BLACKLIST' in os.environ and os.environ['BLACKLIST'] == "true") else False,
+		'auto_update': False if ('AUTO_UPDATE' in os.environ and os.environ['AUTO_UPDATE'] == "false") else True,
+		'filebeat_dir': '/etc/filebeat',
+		'sleep_seconds': float(os.environ['SLEEP_SECONDS']) if 'SLEEP_SECONDS' in os.environ else float('5')
 	}
 
-def generateFilebeatYaml(options, lists, vars):
-	with open('filebeat.yml', 'r') as f:
+def update_filebeat(options):
+	containers = get_containers(options)
+	file = generate_filebeat_yaml(options, {
+		'containers': containers
+	}, {})
+	if filebeat_updated(file, options):
+		print('updated')
+		write_filebeat_yaml(options, file)
+		restart_filebeat(options)
+
+def restart_filebeat(options):
+	print('restarting filebeat')
+	os.system('/etc/init.d/filebeat restart &')
+
+def generate_filebeat_yaml(options, lists, vars):
+	file = ''
+	with open('/scripts/filebeat.yml', 'r') as f:
 		lines = f.readlines()
 		lines = replace_loops(lines, lists)
 		lines = replace_vars(lines, vars)
 		for line in lines:
-			sys.stdout.write(line)
+			file += line
+	return file
+
+def write_filebeat_yaml(options, file):
+	location = (options['filebeat_dir'] + '/filebeat.yml').replace('//', '/')
+	f = open(location, 'w')
+	f.write(file)
 
 def replace_loops(lines, lists):
 	loop = {
@@ -43,7 +65,7 @@ def replace_loops(lines, lists):
 			for i in range(loop['end'] - loop['begin'] - 1):
 				count = i + loop['begin'] + 1
 				chunk_before.append(lines[count])
-			q = re.findall('(?<=\<\<)[\w\d\s\-\_]+', lines[loop['begin']])[0].strip().split(' ')
+			q = re.findall('(?<=\<\<)(.+)', lines[loop['begin']])[0].strip().split(' ')
 			item_name = q[0]
 			items_name = q[len(q) - 1]
 			chunk_after = list()
@@ -80,7 +102,7 @@ def replace_vars(lines, vars):
 		new_lines.append(line)
 	return new_lines
 
-def getContainers(options):
+def get_containers(options):
 	containers = list()
 	for container in client.containers.list():
 		valid = False
@@ -94,7 +116,7 @@ def getContainers(options):
 			else:
 				if label[0] == 'filebeat' and label[1] == 'true':
 					valid = True
-                if valid:
+		if valid:
 			containers.append({
 				'id': container.id,
 				'name': container.name,
@@ -103,10 +125,23 @@ def getContainers(options):
 			})
 	return containers
 
-def checkDockerStatus(options):
+def hash_file(file):
+	md5 = hashlib.md5()
+	md5.update(file)
+	return md5.hexdigest()
+
+def filebeat_updated(new_file, options):
+	current_file = ''
+	location = (options['filebeat_dir'] + '/filebeat.yml').replace('//', '/')
+	with open(location, 'r') as f:
+		lines = f.readlines()
+		for line in lines:
+			current_file += line
+	return hash_file(current_file) != hash_file(new_file)
+
+def check_docker_status(options):
 	while True:
-		print('checking docker status')
-		time.sleep(5)
+		update_filebeat(options)
+		time.sleep(options['sleep_seconds'])
 
 main()
-

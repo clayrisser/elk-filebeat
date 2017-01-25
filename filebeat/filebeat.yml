@@ -7,7 +7,6 @@ filebeat:
       fields:
         name: {{container['name']}}
         id: {{container['id']}}
-        shit: {{boo}}
 >>
 
 output:
