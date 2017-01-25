@@ -3,6 +3,8 @@ services:
     image: jamrizzi/elk:latest
     ports:
       - 5601:5601
+    volumes:
+      - /volumes/elk-data:/var/lib/elasticsearch
   filebeat:
     image: jamrizzi/filebeat:latest
     environment:
