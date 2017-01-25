@@ -21,6 +21,4 @@ RUN chmod -R 777 /scripts
 CMD /etc/init.d/filebeat start &
 CMD echo "filebeat started" && \
     curl -XPUT "http://$KIBANA_HOST:$KIBANA_PORT/_template/filebeat?pretty" -d@/etc/filebeat/filebeat.template.json && \
-    echo "curl ran" && \
     python /scripts/run.py && \
-    echo "python ran"

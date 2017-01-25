@@ -6,10 +6,15 @@ services:
   filebeat:
     image: jamrizzi/filebeat:latest
     environment:
+      BLACKLIST: false
+      SLEEP_SECONDS: 5
       LOGSTASH_HOST: elk
-      LOGSTASH_PORT: '5044'
+      LOGSTASH_PORT: 5044
+      KIBANA_HOST: elk
+      KIBANA_PORT: 9200
+      AUTO_UPDATE: true
     volumes:
-      - /var/run/docker.sock:/tmp/docker.sock
+      - /var/run/docker.sock:/var/run/docker.sock
       - /var/lib/docker/containers:/var/lib/docker/containers
     links:
       - elk:elk
