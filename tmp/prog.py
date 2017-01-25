@@ -1,4 +1,5 @@
 import time
+import re
 import os
 import docker
 import sys
@@ -8,7 +9,11 @@ client = docker.DockerClient(base_url='unix://var/run/docker.sock')
 def main():
 	options = getOptions()
 	containers = getContainers(options)
-	generateFilebeatYaml(containers, options)
+	generateFilebeatYaml(options, {
+		'containers': containers
+	}, {
+		'boo': 'yo dude'
+	})
 #	checkDockerStatus(options)
 
 def getOptions():
@@ -16,29 +21,54 @@ def getOptions():
 		'blacklist': True
 	}
 
-def generateFilebeatYaml(containers, options):
-	for container in containers:
-		print(container)
-	data = {
-		'loops': list()
-	}
-	with open('filebeat.ymlt', 'r') as f:
-		loop = {
-			'begin': -1,
-			'end': -1
-		}
-		for count, line in enumerate(f.readlines()):
-			if line.find('<<') != -1 and loop['begin'] == -1:
-				loop['begin'] = count;
-			elif line.find('>>') != -1 and loop['begin'] != -1:
-				loop['end'] = count;
-				data['loops'].append(loop)
-				loop = {
-					'begin': -1,
-					'end': -1
-				}
+def generateFilebeatYaml(options, lists, vars):
+	with open('filebeat.yml', 'r') as f:
+		lines = f.readlines()
+		lines = replace_loops(lines, lists, vars)
+		for line in lines:
 			sys.stdout.write(line)
-	print(data)
+
+def replace_loops(lines, lists, vars):
+	loop = {
+		'begin': -1,
+		'end': -1
+	}
+	for count, line in enumerate(lines):
+		if line.find('<<') != -1 and loop['begin'] == -1:
+			loop['begin'] = count;
+		elif line.find('>>') != -1 and loop['begin'] != -1 and loop['end'] == -1:
+			loop['end'] = count
+			chunk_before = list()
+			for i in range(loop['end'] - loop['begin'] - 1):
+				count = i + loop['begin'] + 1
+				chunk_before.append(lines[count])
+			q = re.findall('(?<=\<\<)[\w\d\s\-\_]+', lines[loop['begin']])[0].strip().split(' ')
+			item_name = q[0]
+			items_name = q[len(q) - 1]
+			chunk_after = list()
+			exec('for ' + item_name + ' in lists[\'' + items_name + '''\']:
+  for line in chunk_before:
+    for var in re.findall('(?<={{)(.+)(?=}})', line):
+      if var.find(\'''' + item_name + '''[\') != -1:
+	    vars[var] = eval(var)
+      line = line.replace('{{' + var + '}}', vars[var])
+    chunk_after.append(line)
+''')
+			lines = clear_loop(loop['begin'], loop['end'], lines)
+			lines = replace_loop(loop['begin'], lines, chunk_after)
+			return replace_loops(lines, lists, vars)
+	return lines
+
+def clear_loop(begin, end, origional):
+	for i in range(len(origional)):
+		if i >= begin and i <= end:
+			del origional[begin]
+	return origional
+
+def replace_loop(begin, origional, chunk):
+	for i in range(len(chunk)):
+		origional.insert(i + begin, chunk[i])
+	return origional
 
 def getContainers(options):
 	containers = list()
