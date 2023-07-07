@@ -1,6 +1,8 @@
 # elk-filebeat
 Dumps docker logs to an ELK stack automatically
 
+![](assets/elk-filebeat.png)
+
 ## Installation
 ```
 services:
